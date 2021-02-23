@@ -1,6 +1,6 @@
 from data.constant import Tokens
 import os
-from .utils import read_file, get_lang_from_filename, get_dataset_files, get_file_type, preprocess_word
+from .utils import is_bidirectional, read_file, get_lang_from_filename, get_dataset_files, get_file_type, preprocess_word
 
 
 class Dataset:
@@ -40,6 +40,7 @@ class Dataset:
         source_lang, target_lang = get_lang_from_filename(filename)
         lines = read_file(file)
         ext = get_file_type(filename)
+        bi = is_bidirectional(filename)
 
         data = []
 
@@ -49,6 +50,11 @@ class Dataset:
             if len(words) != 2:
                 continue
 
+            if bi:
+                data.append([
+                    preprocess_word(words[1], start=Tokens.to(source_lang)),
+                    preprocess_word(words[0])
+                ])
             data.append([
                 preprocess_word(words[0], start=Tokens.to(target_lang)),
                 preprocess_word(words[1])

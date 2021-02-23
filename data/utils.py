@@ -48,3 +48,9 @@ def get_file_type(file):
         raise ValueError(f'Unknown file type {ext} in {file}')
 
     return ext
+
+
+def is_bidirectional(file):
+    exts = file.split('.')
+
+    return len(exts) == 3 and exts[1] == 'bi'
