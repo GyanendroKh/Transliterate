@@ -21,6 +21,8 @@ class Lang:
 class Tokens:
     start = '<start>'
     end = '<end>'
+    pad = '<pad>'
+    unk = '<unk>'
 
     @staticmethod
     def to(lang):

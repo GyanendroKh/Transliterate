@@ -1,6 +1,7 @@
 from data.constant import Tokens
 import os
-from .utils import is_bidirectional, read_file, get_lang_from_filename, get_dataset_files, get_file_type, preprocess_word
+from tqdm import tqdm
+from .utils import encode_word, get_dataset_files, process_file
 
 
 class Dataset:
@@ -8,12 +9,13 @@ class Dataset:
     validation_dir = None
     train_data = []
     validation_data = []
+    mapping = []
+    mapped_train_data = []
+    mapped_validation_data = []
+    max_len = 0
 
     def __init__(self, path) -> None:
         self.path = path
-        self.init()
-
-    def init(self):
         dirs = os.listdir(self.path)
 
         if 'train' in dirs:
@@ -26,38 +28,49 @@ class Dataset:
         if self.train_dir:
             files = get_dataset_files(self.train_dir)
             for f in files:
-                _, _, words = self.__process_file(f)
+                _, _, words = process_file(f)
                 self.train_data.extend(words)
 
         if self.validation_dir:
             files = get_dataset_files(self.validation_dir)
             for f in files:
-                _, _, words = self.__process_file(f)
+                _, _, words = process_file(f)
                 self.validation_data.extend(words)
 
-    def __process_file(self, file):
-        filename = file.split('/')[-1]
-        source_lang, target_lang = get_lang_from_filename(filename)
-        lines = read_file(file)
-        ext = get_file_type(filename)
-        bi = is_bidirectional(filename)
+        self.__tokenzie()
+        self.__create_mapping_and_pad()
 
-        data = []
+    def __tokenzie(self):
+        print('\nCreating Tokens.')
 
-        for line in lines:
-            words = line.strip().split('\t' if ext == 'tab' else ',')
+        tokens = set()
 
-            if len(words) != 2:
-                continue
+        for data in [self.train_data, self.validation_data]:
+            for word_pair in tqdm(data):
+                for word in word_pair:
+                    if len(word) > self.max_len:
+                        self.max_len = len(word)
 
-            if bi:
-                data.append([
-                    preprocess_word(words[1], start=Tokens.to(source_lang)),
-                    preprocess_word(words[0])
-                ])
-            data.append([
-                preprocess_word(words[0], start=Tokens.to(target_lang)),
-                preprocess_word(words[1])
+                    for char in word:
+                        tokens.add(char)
+
+        # Additional Tokens
+        self.mapping = [
+            Tokens.pad,
+            Tokens.unk
+        ] + sorted(tokens)
+
+    def __create_mapping_and_pad(self):
+        print('\nMapping words to token.')
+
+        for word_pair in tqdm(self.train_data):
+            self.mapped_train_data.append([
+                encode_word(word_pair[0], self.mapping) + ([self.mapping.index(Tokens.pad)] * (self.max_len - len(word_pair[0]))),
+                encode_word(word_pair[1], self.mapping) + ([self.mapping.index(Tokens.pad)] * (self.max_len - len(word_pair[1]))),
             ])
 
-        return source_lang, target_lang, data
+        for word_pair in tqdm(self.validation_data):
+            self.mapped_validation_data.append([
+                encode_word(word_pair[0], self.mapping) + ([self.mapping.index(Tokens.pad)] * (self.max_len - len(word_pair[0]))),
+                encode_word(word_pair[1], self.mapping) + ([self.mapping.index(Tokens.pad)] * (self.max_len - len(word_pair[1]))),
+            ])

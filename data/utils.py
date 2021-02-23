@@ -1,5 +1,6 @@
 import io
 import os
+from tqdm import tqdm
 from .constant import Lang, Tokens, known_ext
 
 
@@ -7,10 +8,54 @@ def read_file(path, num_lines=None):
     return io.open(path).read().strip().split('\n')[:num_lines]
 
 
+def process_file(file):
+    print(f'Processing File {file}.')
+    filename = file.split('/')[-1]
+    source_lang, target_lang = get_lang_from_filename(filename)
+    lines = read_file(file)
+    ext = get_file_type(filename)
+    bi = is_bidirectional(filename)
+
+    data = []
+
+    for line in tqdm(lines):
+        words = line.strip().split('\t' if ext == 'tab' else ',')
+
+        if len(words) != 2:
+            continue
+
+        if bi:
+            data.append([
+                preprocess_word(words[1], start=Tokens.to(source_lang)),
+                preprocess_word(words[0])
+            ])
+        data.append([
+            preprocess_word(words[0], start=Tokens.to(target_lang)),
+            preprocess_word(words[1])
+        ])
+
+    return source_lang, target_lang, data
+
+
 def preprocess_word(word, start=Tokens.start):
-    word = word.lower().strip()
+    word = word.lower().strip().replace('\xad', '').replace('\u200d', '')
 
     return [start, *[c for c in word], Tokens.end]
+
+
+def encode_word(word, mapping):
+    w = []
+
+    for c in word:
+        if c in mapping:
+            w.append(mapping.index(c))
+        else:
+            w.append(mapping.index(Tokens.unk))
+    return w
+
+
+def decode_word(word, mapping):
+    return [mapping[c] for c in word if mapping[c] != Tokens.pad]
 
 
 def get_dataset_files(path, known_ext=known_ext):
