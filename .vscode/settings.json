@@ -1,0 +1,10 @@
+{
+  "python.linting.flake8Enabled": true,
+  "python.linting.enabled": true,
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true
+  }
+}
