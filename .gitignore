@@ -1,5 +1,6 @@
 .idea
 env
+checkpoints
 __pycache__
 dataset/**/*.*
 !dataset/*/.gitkeep
