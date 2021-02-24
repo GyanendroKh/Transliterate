@@ -1,5 +1,5 @@
 from tqdm import tqdm
-from .utils import encode_word, get_dataset_files, process_file
+from .utils import encode_word, get_dataset_files, process_file, to_tf_dataset
 from data.constant import Tokens
 
 
@@ -25,6 +25,14 @@ class Dataset:
 
         self.__tokenize()
         self.__create_mapping_and_pad()
+
+    def export_as_tf_dataset(self):
+        if len(self.mapped_data) == 0:
+            raise ValueError('There is no mapped data.')
+
+        train_dataset = to_tf_dataset(self.mapped_data)
+
+        return train_dataset
 
     def __tokenize(self):
         print('\nCreating Tokens.')
