@@ -6,12 +6,26 @@ from data.constant import Tokens
 class Dataset:
     data_dir = None
     data = []
+    config = None
     mapping = []
     mapped_data = []
     max_len = 0
 
-    def __init__(self, path) -> None:
+    def __init__(self, path, config=None) -> None:
         self.data_dir = path
+
+        if config:
+            if 'mapping' in config:
+                self.mapping = config['mapping']
+            else:
+                raise ValueError("Invalid config. Missing 'mapping'.")
+
+            if 'max_len' in config:
+                self.max_len = config['max_len']
+            else:
+                raise ValueError("Invalid config. Missing 'max_len'.")
+
+            self.config = config
 
     def create(self):
         if self.data_dir:
@@ -23,7 +37,11 @@ class Dataset:
         if len(self.data) == 0:
             return
 
-        self.__tokenize()
+        if not self.config:
+            self.__tokenize()
+        else:
+            print('Skipping tokenization as config is provided.')
+
         self.__create_mapping_and_pad()
 
     def export_as_tf_dataset(self):
