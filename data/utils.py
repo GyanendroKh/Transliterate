@@ -80,7 +80,7 @@ def to_tf_dataset(data):
     return tf.data.Dataset.from_tensor_slices((
         {
             'inputs': source,
-            'dec_inputs': target[:, -1]
+            'dec_inputs': target[:, :-1]
         },
         {
             'outputs': target[:, 1:]
