@@ -4,15 +4,13 @@ from data.constant import Tokens
 
 
 class Dataset:
-    data_dir = None
-    data = []
-    config = None
-    mapping = []
-    mapped_data = []
-    max_len = 0
-
     def __init__(self, path, config=None) -> None:
         self.data_dir = path
+        self.data = []
+        self.config = config
+        self.mapping = []
+        self.mapped_data = []
+        self.max_len = 0
 
         if config:
             if 'mapping' in config:
