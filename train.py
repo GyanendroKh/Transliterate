@@ -57,7 +57,7 @@ def main(epochs,
             restore_checkpoint = 0
         mapping, max_len = config['mapping'], config['max_len']
         train_dataset = Dataset(dataset_dir, config={
-            'mapping': max_len,
+            'mapping': mapping,
             'max_len': max_len
         })
         train_dataset.create()
