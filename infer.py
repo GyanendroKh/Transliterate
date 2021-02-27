@@ -86,7 +86,8 @@ def main(checkpoint, to, sentence):
         units=units,
         d_model=d_model,
         num_heads=num_heads,
-        dropout=dropout
+        dropout=dropout,
+        training=False
     )
 
     ckpt = tf.train.Checkpoint(model=model)

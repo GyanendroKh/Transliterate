@@ -1,5 +1,6 @@
 import json
 import os
+import time
 
 import click
 import tensorflow as tf
@@ -13,9 +14,9 @@ from utils import check_checkpoint_config
 @click.command()
 @click.option('--epochs', default=10, type=int, help='Number of Epoch to train.')
 @click.option('--batch-size', default=64, type=int, help='Number of batch for training.')
-@click.option('--layers', default=5, type=int, help='Number of layers.')
+@click.option('--layers', default=4, type=int, help='Number of layers.')
 @click.option('--units', default=512, type=int, help='Number of units for the Dense Layers.')
-@click.option('--d_model', default=256, type=int, help='Model Dimension.')
+@click.option('--d_model', default=128, type=int, help='Model Dimension.')
 @click.option('--heads', default=8, type=int, help='Number of heads.')
 @click.option('--dropout', default=0.1, type=float, help='Dropout Rate.')
 @click.option('--dataset-dir', default='dataset/train', help='Path to the dataset directory.')
@@ -106,17 +107,6 @@ def main(epochs,
         dropout=dropout
     )
 
-    def loss_function(y_true, y_pred):
-        y_true = tf.reshape(y_true, shape=(-1, max_len - 1))
-
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction='none')(y_true, y_pred)
-
-        mask = tf.cast(tf.not_equal(y_true, 0), tf.float32)
-        loss = tf.multiply(loss, mask)
-
-        return tf.reduce_mean(loss)
-
     class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         def __init__(self, m, warmup_steps=4000):
             super(CustomSchedule, self).__init__()
@@ -147,11 +137,30 @@ def main(epochs,
         epsilon=1e-9
     )
 
-    def accuracy(y_true, y_pred):
-        y_true = tf.reshape(y_true, shape=(-1, max_len - 1))
-        return tf.keras.metrics.sparse_categorical_accuracy(y_true, y_pred)
+    loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction='none')
 
-    model.compile(optimizer=optimizer, loss=loss_function, metrics=[accuracy])
+    def loss_function(real, pred):
+        mask = tf.math.logical_not(tf.math.equal(real, 0))
+        loss_ = loss_object(real, pred)
+
+        mask = tf.cast(mask, dtype=loss_.dtype)
+        loss_ += mask
+
+        return tf.reduce_sum(loss_) / tf.reduce_sum(mask)
+
+    def accuracy_function(real, pred):
+        accuracies = tf.equal(real, tf.argmax(pred, axis=2))
+
+        mask = tf.math.logical_not(tf.math.equal(real, 0))
+        accuracies = tf.math.logical_and(mask, accuracies)
+
+        accuracies = tf.cast(accuracies, dtype=tf.float32)
+        mask = tf.cast(mask, dtype=tf.float32)
+
+        return tf.reduce_sum(accuracies) / tf.reduce_sum(mask)
+
+    train_loss = tf.keras.metrics.Mean(name='train_loss')
+    train_accuracy = tf.keras.metrics.Mean(name='train_accuracy')
 
     if not restore_checkpoint:
         with open(config_path, 'w') as f:
@@ -164,19 +173,48 @@ def main(epochs,
         ckpt.restore(ckpt_manager.latest_checkpoint)
         echo('Checkpoint restored...')
 
-    class CheckpointCallback(tf.keras.callbacks.Callback):
-        def on_epoch_end(self, e, logs=None):
-            if ((e + 1) % epoch_to_save) == 0:
-                ckpt_save_path = ckpt_manager.save()
-                print(f'\rSaving checkpoint for epoch {e + 1} at {ckpt_save_path}')
+    train_step_signature = [
+        tf.TensorSpec(shape=(None, None), dtype=tf.int64),
+        tf.TensorSpec(shape=(None, None), dtype=tf.int64),
+        tf.TensorSpec(shape=(None, None), dtype=tf.int64)
+    ]
 
-    model.fit(
-        dataset,
-        epochs=epochs,
-        callbacks=[CheckpointCallback()],
-        validation_data=dataset_val,
-        verbose=2 if verbose > 2 else verbose
-    )
+    @tf.function(input_signature=train_step_signature)
+    def train_step(inp, tar_inp, tar_real):
+        with tf.GradientTape() as tape:
+            predictions = model(inputs=[inp, tar_inp])
+            loss = loss_function(tar_real, predictions)
+
+        gradients = tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+        train_loss(loss)
+        train_accuracy(accuracy_function(tar_real, predictions))
+
+    for epoch in range(epochs):
+        start = time.time()
+
+        train_loss.reset_states()
+        train_accuracy.reset_states()
+
+        for (batch, data) in enumerate(dataset):
+            inp = data[0]['inputs']
+            tar_inp = data[0]['dec_inputs']
+            tar_real = data[1]['outputs']
+
+            train_step(inp, tar_inp, tar_real)
+
+            if batch % 50 == 0:
+                print(f'Epoch {epoch + 1}; Batch {batch}; Loss {train_loss.result():.4f}; Accuracy {train_accuracy.result():.4f}')
+
+        if (epoch + 1) % epoch_to_save == 0:
+            ckpt_save_path = ckpt_manager.save()
+
+            print(f'Saving checkpoint at {ckpt_save_path}')
+
+        print(f'Epoch {epoch + 1}; Loss {train_loss.result():.4f}; Accuracy {train_accuracy.result():.4f}')
+
+        print(f'Time taken for 1 epoch is {(time.time() - start):.2f} seconds.\n')
 
 
 if __name__ == '__main__':
