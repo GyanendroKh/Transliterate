@@ -6,17 +6,26 @@ from .encoder import encoder
 
 def create_padding_mask(x):
     mask = tf.cast(tf.math.equal(x, 0), tf.float32)
+
     return mask[:, tf.newaxis, tf.newaxis, :]
 
 
-def create_look_ahead_mask(x):
-    seq_len = tf.shape(x)[1]
-    look_ahead_mask = 1 - tf.linalg.band_part(tf.ones((seq_len, seq_len)), -1, 0)
-    padding_mask = create_padding_mask(x)
-    return tf.maximum(look_ahead_mask, padding_mask)
+def create_look_ahead_mask(size):
+    mask = 1 - tf.linalg.band_part(tf.ones((size, size)), -1, 0)
+
+    return mask
 
 
-def transformer(max_len, vocab_size, num_layers, units, d_model, num_heads, dropout, name='transformer'):
+def create_combined_mask(tar):
+    look_ahead_mask = create_look_ahead_mask(tf.shape(tar)[1])
+    dec_target_padding_mask = create_padding_mask(tar)
+
+    combined_mask = tf.maximum(dec_target_padding_mask, look_ahead_mask)
+
+    return combined_mask
+
+
+def transformer(max_len, vocab_size, num_layers, units, d_model, num_heads, dropout, training=True, name='transformer'):
     inputs = tf.keras.Input(shape=(max_len,), name='inputs')
     dec_inputs = tf.keras.Input(shape=(max_len - 1,), name='dec_inputs')
 
@@ -27,7 +36,7 @@ def transformer(max_len, vocab_size, num_layers, units, d_model, num_heads, drop
     )(inputs)
 
     look_ahead_mask = tf.keras.layers.Lambda(
-        create_look_ahead_mask,
+        create_combined_mask,
         output_shape=(1, max_len - 1, max_len - 1),
         name='trans_look_ahead_mask'
     )(dec_inputs)
@@ -46,6 +55,7 @@ def transformer(max_len, vocab_size, num_layers, units, d_model, num_heads, drop
         d_model=d_model,
         num_heads=num_heads,
         dropout=dropout,
+        training=training
     )
     enc_outputs = enc(inputs=[inputs, enc_padding_mask])
 
@@ -57,6 +67,7 @@ def transformer(max_len, vocab_size, num_layers, units, d_model, num_heads, drop
         d_model=d_model,
         num_heads=num_heads,
         dropout=dropout,
+        training=training
     )
     dec_outputs = dec(inputs=[dec_inputs, enc_outputs, look_ahead_mask, dec_padding_mask])
 

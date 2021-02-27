@@ -1,24 +1,26 @@
 import tensorflow as tf
+import numpy as np
 
 
 def get_angles(position, i, d_model):
-    angles = 1 / tf.pow(10000, (2 * (i // 2)) / tf.cast(d_model, tf.float32))
+    angles = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
+
     return position * angles
 
 
 def positional_encoding(position, d_model):
     angle_rads = get_angles(
-        position=tf.range(position, dtype=tf.float32)[:, tf.newaxis],
-        i=tf.range(d_model, dtype=tf.float32)[tf.newaxis, :],
-        d_model=d_model
+        np.arange(position)[:, np.newaxis],
+        np.arange(d_model)[np.newaxis, :],
+        d_model
     )
 
-    sines = tf.math.sin(angle_rads[:, 0::2])
-    cosines = tf.math.cos(angle_rads[:, 1::2])
+    angle_rads[:, 0::2] = np.sin(angle_rads[:, 0::2])
+    angle_rads[:, 1::2] = np.cos(angle_rads[:, 1::2])
 
-    pos_encoding = tf.concat([sines, cosines], axis=-1)
-    pos_encoding = pos_encoding[tf.newaxis, ...]
-    return tf.cast(pos_encoding, tf.float32)
+    pos_encoding = angle_rads[np.newaxis, ...]
+
+    return tf.cast(pos_encoding, dtype=tf.float32)
 
 
 class PositionalEncoding(tf.keras.layers.Layer):

@@ -13,6 +13,13 @@ def scaled_dot_product_attention(query, key, value, mask):
     return tf.matmul(attention_weight, value)
 
 
+def point_wise_feed_forward_network(d_model, dff):
+    return tf.keras.Sequential([
+        tf.keras.layers.Dense(dff, activation='relu'),
+        tf.keras.layers.Dense(d_model)
+    ])
+
+
 class MultiHeadAttention(tf.keras.layers.Layer):
     def __init__(self, d_model, num_heads, name='multi_head_attention'):
         super(MultiHeadAttention, self).__init__(name=name)
