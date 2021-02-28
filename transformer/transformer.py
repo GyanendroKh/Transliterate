@@ -1,7 +1,5 @@
 import tensorflow as tf
-
-from .decoder import decoder
-from .encoder import encoder
+from .layers import Encoder, Decoder
 
 
 def create_padding_mask(x):
@@ -25,56 +23,29 @@ def create_combined_mask(tar):
     return combined_mask
 
 
-def transformer(max_len, vocab_size, num_layers, units, d_model, num_heads, dropout, training=True, name='transformer'):
-    inputs = tf.keras.Input(shape=(max_len,), name='inputs')
-    dec_inputs = tf.keras.Input(shape=(max_len - 1,), name='dec_inputs')
+def create_masks(inp, tar):
+    enc_padding_mask = create_padding_mask(inp)
+    dec_padding_mask = create_padding_mask(inp)
 
-    enc_padding_mask = tf.keras.layers.Lambda(
-        create_padding_mask,
-        output_shape=(1, 1, max_len),
-        name='trans_enc_pad_mask'
-    )(inputs)
+    combined_mask = create_combined_mask(tar)
 
-    look_ahead_mask = tf.keras.layers.Lambda(
-        create_combined_mask,
-        output_shape=(1, max_len - 1, max_len - 1),
-        name='trans_look_ahead_mask'
-    )(dec_inputs)
+    return enc_padding_mask, combined_mask, dec_padding_mask
 
-    dec_padding_mask = tf.keras.layers.Lambda(
-        create_padding_mask,
-        output_shape=(1, 1, max_len),
-        name='trans_dec_pad_mask'
-    )(inputs)
 
-    enc = encoder(
-        seq_len=max_len,
-        vocab_size=vocab_size,
-        num_layers=num_layers,
-        units=units,
-        d_model=d_model,
-        num_heads=num_heads,
-        dropout=dropout,
-        training=training
-    )
-    enc_outputs = enc(inputs=[inputs, enc_padding_mask])
+class Transformer(tf.keras.Model):
+    def __init__(self, num_layers, d_model, num_heads, dff, input_vocab_size, target_vocab_size, pe_input, pe_target, rate=0.1):
+        super(Transformer, self).__init__()
 
-    dec = decoder(
-        seq_len=max_len,
-        vocab_size=vocab_size,
-        num_layers=num_layers,
-        units=units,
-        d_model=d_model,
-        num_heads=num_heads,
-        dropout=dropout,
-        training=training
-    )
-    dec_outputs = dec(inputs=[dec_inputs, enc_outputs, look_ahead_mask, dec_padding_mask])
+        self.encoder = Encoder(num_layers, d_model, num_heads, dff, input_vocab_size, pe_input, rate)
+        self.decoder = Decoder(num_layers, d_model, num_heads, dff, target_vocab_size, pe_target, rate)
 
-    outputs = tf.keras.layers.Dense(units=vocab_size, name='outputs')(dec_outputs)
+        self.final_layer = tf.keras.layers.Dense(target_vocab_size)
 
-    return tf.keras.Model(
-        inputs=[inputs, dec_inputs],
-        outputs=outputs,
-        name=name
-    )
+    def call(self, inp, tar, training, enc_padding_mask, look_ahead_mask, dec_padding_mask):
+        enc_output = self.encoder(inp, training, enc_padding_mask)
+
+        dec_output = self.decoder(tar, enc_output, training, look_ahead_mask, dec_padding_mask)
+
+        final_output = self.final_layer(dec_output)
+
+        return final_output

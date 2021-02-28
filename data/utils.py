@@ -77,15 +77,7 @@ def to_tf_dataset(data):
     source = data[:, 0]
     target = data[:, 1]
 
-    return tf.data.Dataset.from_tensor_slices((
-        {
-            'inputs': source,
-            'dec_inputs': target[:, :-1]
-        },
-        {
-            'outputs': target[:, 1:]
-        }
-    ))
+    return tf.data.Dataset.from_tensor_slices((source, target))
 
 
 def get_lang_from_filename(name):

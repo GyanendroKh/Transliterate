@@ -7,7 +7,7 @@ import tensorflow as tf
 from click import echo
 
 from data.data import Dataset
-from transformer.transformer import transformer
+from transformer.transformer import Transformer, create_masks
 from utils import check_checkpoint_config
 
 
@@ -97,14 +97,16 @@ def main(epochs,
     print('Training Data Size:', buffer_size)
     print('Validation Data Size:', val_buffer_size)
 
-    model = transformer(
-        max_len=max_len,
-        vocab_size=vocab_size,
+    model = Transformer(
         num_layers=layers,
-        units=units,
         d_model=d_model,
         num_heads=heads,
-        dropout=dropout
+        dff=units,
+        input_vocab_size=vocab_size,
+        target_vocab_size=vocab_size,
+        pe_input=1000,
+        pe_target=1000,
+        rate=dropout
     )
 
     class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -175,14 +177,20 @@ def main(epochs,
 
     train_step_signature = [
         tf.TensorSpec(shape=(None, None), dtype=tf.int64),
-        tf.TensorSpec(shape=(None, None), dtype=tf.int64),
         tf.TensorSpec(shape=(None, None), dtype=tf.int64)
     ]
 
     @tf.function(input_signature=train_step_signature)
-    def train_step(inp, tar_inp, tar_real):
+    def train_step(inp, tar):
+        tar_inp = tar[:, :-1]
+        tar_real = tar[:, 1:]
+
+        enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, tar_inp)
+
         with tf.GradientTape() as tape:
-            predictions = model(inputs=[inp, tar_inp])
+            predictions = model(
+                inp, tar_inp, True, enc_padding_mask, combined_mask, dec_padding_mask
+            )
             loss = loss_function(tar_real, predictions)
 
         gradients = tape.gradient(loss, model.trainable_variables)
@@ -197,12 +205,8 @@ def main(epochs,
         train_loss.reset_states()
         train_accuracy.reset_states()
 
-        for (batch, data) in enumerate(dataset):
-            inp = data[0]['inputs']
-            tar_inp = data[0]['dec_inputs']
-            tar_real = data[1]['outputs']
-
-            train_step(inp, tar_inp, tar_real)
+        for (batch, (inp, tar)) in enumerate(dataset):
+            train_step(inp, tar)
 
             if batch % 50 == 0:
                 print(f'Epoch {epoch + 1}; Batch {batch}; Loss {train_loss.result():.4f}; Accuracy {train_accuracy.result():.4f}')

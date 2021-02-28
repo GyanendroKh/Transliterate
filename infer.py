@@ -7,7 +7,7 @@ from click import echo
 
 from data.utils import preprocess_word, encode_word, decode_word
 from data.constant import Tokens
-from transformer.transformer import transformer
+from transformer.transformer import Transformer, create_masks
 from utils import check_checkpoint_config
 
 
@@ -29,21 +29,15 @@ def evaluate(config, sentence, to):
     for word in words:
         if len(word) > max_len:
             raise TypeError(f'Length of the word should be <= `max_len`\nWord: {word}; max_len: {max_len}')
-        inp = encode_word(word, mapping) + ([mapping.index(Tokens.pad)] * (max_len - len(word)))
+        inp = encode_word(word, mapping)
         inp = tf.expand_dims(inp, axis=0)
 
-        output = tf.expand_dims([mapping.index(Tokens.end)], 0)
+        output = tf.expand_dims([mapping.index(Tokens.start)], 0)
 
-        for i in range(max_len):
-            output_in = output
-            pad = tf.expand_dims([mapping.index(Tokens.pad)] * (max_len - output.shape[1] - 1), 0)
-            if not pad.shape[1] == 0:
-                output_in = tf.concat([output, pad], axis=-1)
+        for _ in range(max_len):
+            enc_padding_mask, combined_mask, dec_padding_mask = create_masks(inp, output)
 
-            predictions = model(
-                inputs=[inp, output_in],
-                training=False
-            )
+            predictions = model(inp, output, False, enc_padding_mask, combined_mask, dec_padding_mask)
 
             predictions = predictions[:, -1:, :]
             predicted_id = tf.cast(tf.argmax(predictions, axis=-1), tf.int32)
@@ -70,24 +64,25 @@ def main(checkpoint, to, sentence):
     config = os.path.join(checkpoint, 'config.json')
     config = check_checkpoint_config(config)
 
-    num_layers = config['num_layers']
+    layers = config['num_layers']
     units = config['units']
     d_model = config['d_model']
-    num_heads = config['num_heads']
+    heads = config['num_heads']
     dropout = config['dropout']
     max_len = config['max_len']
     mapping = config['mapping']
     vocab_size = len(mapping)
 
-    model = transformer(
-        max_len=max_len,
-        vocab_size=vocab_size,
-        num_layers=num_layers,
-        units=units,
+    model = Transformer(
+        num_layers=layers,
         d_model=d_model,
-        num_heads=num_heads,
-        dropout=dropout,
-        training=False
+        num_heads=heads,
+        dff=units,
+        input_vocab_size=vocab_size,
+        target_vocab_size=vocab_size,
+        pe_input=1000,
+        pe_target=1000,
+        rate=dropout
     )
 
     ckpt = tf.train.Checkpoint(model=model)
