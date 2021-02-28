@@ -42,15 +42,15 @@ def evaluate(config, sentence, to):
             predictions = predictions[:, -1:, :]
             predicted_id = tf.cast(tf.argmax(predictions, axis=-1), tf.int32)
 
+            output = tf.concat([output, predicted_id], axis=-1)
+
             if tf.equal(predicted_id, [mapping.index(Tokens.end)]):
                 break
-
-            output = tf.concat([output, predicted_id], axis=-1)
 
             if len(output[0]) >= max_len:
                 break
 
-        decoded = decode_word(tf.squeeze(output, axis=0), mapping)[1:]
+        decoded = decode_word(tf.squeeze(output, axis=0), mapping)[1:-1]
         results.append(''.join(decoded))
 
     return results
