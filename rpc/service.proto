@@ -1,0 +1,15 @@
+syntax = "proto2";
+
+service Trans {
+  rpc infer (SourceWord) returns (Output) {}
+}
+
+message SourceWord {
+  required string word = 1;
+  required string to = 2;
+}
+
+message Output {
+  required string output = 1;
+  required float time = 2;
+}
