@@ -144,7 +144,7 @@ class Model:
             loss_ = loss_object(real, pred)
 
             mask = tf.cast(mask, dtype=loss_.dtype)
-            loss_ += mask
+            loss_ *= mask
 
             return tf.reduce_sum(loss_) / tf.reduce_sum(mask)
 
